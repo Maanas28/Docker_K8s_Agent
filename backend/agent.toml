@@ -1,0 +1,266 @@
+# Agent behaviour switches (feature flags).
+#
+# Each technique below can be turned off to compare behaviour or revert it, without code changes.
+# Precedence: environment variables > this file > defaults in app/config.py.
+# Env var form for nested keys: AGENT_CONTEXT__COMPACT_TOOL_OUTPUT=false
+#
+# Background: every model call re-sends the whole conversation. Long tasks (reading files,
+# rewriting a Dockerfile, later build logs) pile up text until the context window is full, and
+# Ollama then silently drops the OLDEST text first: the instructions and the user's request.
+# These techniques keep what the model sees small and current. The full history is always kept;
+# only the copy sent to the model is trimmed.
+
+[context]
+
+# 1. Compact tool output.
+# The model gets the useful part of long outputs: the last N lines of logs (errors are usually at
+# the end) and the first rows of long tables. The UI still shows everything.
+compact_tool_output = true
+compact_log_lines = 60
+compact_table_rows = 40
+
+# 2. Replace outdated outputs.
+# When a file is read or written again (or the exact same call is repeated), older copies in the
+# history become a one-line note, including the full content of old write attempts.
+replace_outdated_outputs = true
+
+# 3. Attempt log.
+# A short list of earlier refused/failed attempts in this conversation is added to the
+# instructions, so the model keeps the lessons without keeping the old outputs.
+attempt_log = true
+attempt_log_size = 8
+
+# 4. Fresh, focused context per fix attempt: NOT USED.
+# Considered on 2026-10-01 and rejected: each fix attempt would only see facts + current file +
+# latest error, not the conversation. Decided it narrows the model's view too much.
+# focused_fix_context = false
+
+# 5. Relevant tools only.
+# Send only the tools for the request's platform (your code projects vs Docker) instead of all of
+# them: ~2,000 fewer tokens per call and fewer wrong choices for a small model.
+relevant_tools_only = true
+
+# 6. Measure and compact.
+# Before each call, estimate the size (about 4 characters per token). Past this share of the
+# context window, the oldest tool outputs are shortened first, so the user's request and the
+# instructions are never what gets dropped. Set to 1.0 to turn off.
+compact_at_ratio = 0.75
+
+# 7. Build facts (idea A, added 2026-10-03 with Step 3).
+# project_context also states facts detected by code, not guessed by the model: the package
+# manager (from lock files, plus "no requirements.txt" when a Python project has none), the
+# likely start command (e.g. `python -m app` from app/__main__.py) and port candidates with the
+# file and line they came from. These are facts, not rules: the model still writes the Dockerfile.
+# Turn off to compare how many build attempts the fix loop needs without them.
+build_facts = true
+
+
+# Approvals. Added 2026-10-03.
+[approvals]
+
+# "Allow for this session" on change cards of tools that opt in (writing the Dockerfile/.dockerignore
+# and building the image, one group). One click lets those tools run on that one project without a
+# card until the chat session ends (New chat, reload, disconnect); revocable from the bar above the
+# input. Pre-checks, failure notices, the error budget and Stop all still apply. Never offered for
+# destructive actions. Grants are in memory only, never stored.
+# Rejected: storing it like read "always allow" (a lasting permission to change files is too broad),
+# and allowing every change tool (e.g. "restart any container" is more than a fix loop needs).
+session_allow = true
+
+
+# Running containers (Step 4: project_run_container). Added 2026-10-05.
+[run]
+
+# Health check after starting, like Docker HEALTHCHECK / Kubernetes probes:
+# - one attempt every health_interval_s seconds, for at most health_timeout_s seconds
+#   (so at most timeout / interval attempts: 30 by default);
+# - health_failure_threshold error answers (HTTP 5xx) in a row fail it at once: the app is up but
+#   says it's broken (a single 5xx while starting is tolerated);
+# - the container exiting fails it at once; a 2xx/3xx answer passes it at once.
+health_timeout_s = 30
+health_interval_s = 1
+health_failure_threshold = 5
+
+# Paths tried in order on each attempt. 2xx/3xx/401/403 = up. 404/405 = that path doesn't exist, try
+# the next one (only the LAST path may count a 404 as "up": the fallback for apps without a health
+# endpoint). 5xx = the app reports itself unhealthy (never falls through to the next path).
+# Changed 2026-10-09: before, any answer below 500 on any path counted, so a 404 on /healthz passed
+# an app whose /health answered 500.
+health_paths = ["/health", "/healthz", "/"]
+
+# The container's port is published on this address only. 127.0.0.1 = reachable from this Mac,
+# not from your network. (0.0.0.0 would expose the app to everyone on your Wi-Fi.)
+bind_address = "127.0.0.1"
+
+# Hand the project's .env to the container, so the app gets its settings. The values are read by
+# code and given to Docker only: the model and the UI see variable names, and any value that shows
+# up in the container's logs is masked.
+pass_env_file = true
+
+
+# When steps fail (the build-and-fix loop). Added 2026-10-03 after the first real runs.
+[loop]
+
+# Stop the loop when the same tool fails with the same error twice in a row (ids such as BuildKit
+# refs are ignored when comparing). The change in between didn't help, so another guess is unlikely
+# to; the agent lists what it tried and asks the user. Off = only the error budget stops it.
+same_error_brake = true
+
+# After a failed step, if the model replies with text only ("I'll update the Dockerfile…") and no
+# tool call, ask it once (hidden) to make the call or ask the user a direct question. Its text stays
+# visible. Off = the turn ends and the user has to say "go ahead".
+failure_nudge = true
+
+
+# Building images (Step 3: project_build_image).
+# Builds run the real `docker build` (BuildKit), the same builder you get in a terminal or CI.
+# The Docker SDK was NOT used: docker-py only drives the legacy builder, which fails on valid
+# Dockerfiles (e.g. `RUN --mount=type=cache`), so the fix loop would "fix" things that aren't
+# broken. See docs/LIMITATIONS.md.
+[build]
+
+# A build is killed after this many seconds (dependency installs can be slow the first time).
+timeout_s = 900
+
+# Build output reaches the step row in batches this often, instead of one message per line.
+progress_interval_ms = 250
+
+# Warn on the approval card when more than this many MB would be sent to the build
+# (usually a .venv or node_modules that .dockerignore should exclude).
+warn_context_mb = 100
+
+# Lines of build output kept per build (oldest dropped first); the model gets only the last
+# compact_log_lines of them.
+max_log_lines = 5000
+
+
+# ================================================================================================
+# Model dropdown (added 2026-10-05).
+# Every chat starts on default_model (local). Switch in the header; the conversation carries over.
+# Only providers with a genuinely FREE tier are allowed (enforced in app/config.py):
+#   - local Ollama only (ollama_host must be this machine; Ollama Cloud is out of scope),
+#   - OpenRouter models must end in ":free",
+#   - no Mistral (credit-based), no Ollama Cloud, no Cerebras (now a paid trial).
+# API keys go in backend/.env (you add them): AGENT_GROQ_API_KEY, AGENT_GEMINI_API_KEY,
+# AGENT_OPENROUTER_API_KEY, AGENT_NVIDIA_API_KEY. A model without its key shows as unavailable.
+# Gemini is only free if the key's Google Cloud project has NO billing account linked.
+# Check model ids and limits with: uv run python -m scripts.check_models
+# ================================================================================================
+
+# Every chat starts on the model with id "local" (change with AGENT_DEFAULT_MODEL in backend/.env;
+# a top-level key can't go here, below other [tables]).
+
+[quota]
+# Stop (and grey out the model) when this many calls or fewer are left today, so a model never
+# runs out in the middle of a task. These last calls are never used.
+reserve_calls = 2
+# Wait at most this long for a per-minute limit (a countdown shows in the chat); longer = stop.
+max_wait_s = 90
+# Cap on each reply's length (also bounds how many tokens a call can use).
+max_output_tokens = 4096
+# A cloud request is given up after this many seconds without an answer. Large free models (e.g.
+# GLM 5.3 on NVIDIA) can be slow to start; 502/503/504 "busy" answers are retried twice (3 s, 8 s).
+request_timeout_s = 180
+
+[[models]]
+id = "local"
+label = "Local model"
+provider = "ollama"
+# model empty = AGENT_OLLAMA_MODEL / ollama_model (qwen3:8b)
+
+[[models]]
+id = "groq-qwen3.8-27b"
+label = "Qwen3.8 27B"
+provider = "groq"
+model = "qwen/qwen3.8-27b"  # verify with scripts.check_models
+pool = "groq-qwen3.8-27b"
+
+[[models]]
+id = "groq-gpt-oss-120b"
+label = "GPT-OSS 120B"
+provider = "groq"
+model = "openai/gpt-oss-120b"
+pool = "groq-gpt-oss-120b"
+
+[[models]]
+id = "gemini-3.8-flash"
+label = "Gemini 3.8 Flash"
+provider = "gemini"
+model = "gemini-3.8-flash"
+pool = "gemini-3.8-flash"
+
+[[models]]
+id = "gemini-2.5-flash"
+label = "Gemini 2.5 Flash"
+provider = "gemini"
+model = "gemini-2.5-flash"
+pool = "gemini-2.5-flash"
+
+[[models]]
+id = "openrouter-qwen3.8-27b"
+label = "Qwen3.8 27B (free)"
+provider = "openrouter"
+model = "qwen/qwen3.8-27b:free"  # checked 2026-10-05; the free list rotates
+pool = "openrouter-free"
+
+[[models]]
+id = "openrouter-nemotron-3-super"
+label = "Nemotron 3 Super 120B (free)"
+provider = "openrouter"
+model = "nvidia/nemotron-3-super-120b-a12b:free"  # checked 2026-10-05
+pool = "openrouter-free"  # shares the 50 free requests a day with the model above
+
+[[models]]
+id = "nvidia-glm-5.3"
+label = "GLM 5.3"
+provider = "nvidia"
+model = "z-ai/glm-5.3"  # checked 2026-10-05 (Free Endpoint, tool calling)
+pool = "nvidia"
+
+[[models]]
+id = "nvidia-kimi-k3"
+label = "Kimi K3"
+provider = "nvidia"
+model = "moonshotai/kimi-k3"  # checked 2026-10-05 (Free Endpoint, agentic coding)
+pool = "nvidia"  # NVIDIA's per-minute limit is per account, so both share it
+
+# Usage pools: the limits a provider applies, and the counter for them. Models that share a limit
+# share a pool (OpenRouter's 50 free requests a day cover all its free models together).
+# Where sources disagreed, the LOWER figure is used: raise it to what your provider's console
+# shows. Groq also reports its real daily request count with every reply, which overrides ours.
+
+[pools."groq-qwen3.8-27b"]
+requests_per_day = 1000
+tokens_per_day = 200000
+requests_per_minute = 30
+tokens_per_minute = 8000
+reset_timezone = "UTC"
+
+[pools."groq-gpt-oss-120b"]
+requests_per_day = 1000
+tokens_per_day = 200000
+requests_per_minute = 30
+tokens_per_minute = 8000
+reset_timezone = "UTC"
+
+[pools."gemini-3.8-flash"]
+# Reports range from 20 to 1,500 a day; 20 until AI Studio shows you more.
+requests_per_day = 20
+requests_per_minute = 10
+reset_timezone = "America/Los_Angeles"  # Google's daily quotas reset at midnight Pacific
+
+[pools."gemini-2.5-flash"]
+requests_per_day = 250
+requests_per_minute = 10
+reset_timezone = "America/Los_Angeles"
+
+[pools."openrouter-free"]
+# Without ever buying credits: 50 requests a day across all :free models, 20 a minute.
+requests_per_day = 50
+requests_per_minute = 20
+reset_timezone = "UTC"
+
+[pools."nvidia"]
+# Free developer access is limited per minute; no daily cap is published (calls are still counted).
+requests_per_minute = 40
+reset_timezone = "UTC"
