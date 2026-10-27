@@ -641,7 +641,7 @@ class Agent:
 
     def _relevant_tools(self) -> list[dict]:
         """Only the tools for this request's platform (technique 5); all of them if unsure."""
-        if self.settings.context.relevant_tools_only and self._platform in ("docker", "project"):
+        if self.settings.context.relevant_tools_only and self._platform in ("docker", "project", "kubernetes"):
             tools = [t.schema() for t in self.registry.all() if t.platform == self._platform]
             if tools:
                 return tools

@@ -32,7 +32,7 @@ ROUTING = [
     ("delete the old postgres container", "action"), ("pull the latest redis image", "action"),
     ("how much memory is the api container using?", "action"), ("remove the mongo image", "action"),
     ("scale the web deployment to 3 replicas", "unsupported"),
-    ("list the pods in my default namespace", "unsupported"), ("show my running containers", "action"),
+    ("list the pods in my default namespace", "action"), ("show my running containers", "action"),
     ("what is a pod?", "question"), ("show logs of the api container", "action"),
     ("is my postgres container healthy?", "action"), ("which containers exited with an error?", "action"),
     ("hi, what can you do?", "question"), ("delete my AWS account", "unsupported"),
@@ -46,6 +46,8 @@ ROUTING = [
     ("run sample-project in a container", "action"),
     ("roll back sample-project", "action"),
     ("which versions of sample-project do I have?", "action"),
+    ("why is my pod crashing in kubernetes?", "action"),
+    ("restart the web deployment in kubernetes", "unsupported"),
 ]
 
 # (message, expected tool (or a tuple of acceptable ones for vague requests), arguments that must
@@ -76,6 +78,8 @@ TOOL_CALLS = [
     ("roll back sample-project to the previous version", ("project_run_container", "project_versions"),
      {"project": "sample-project"}),
     ("what versions of sample-project do I have?", "project_versions", {"project": "sample-project"}),
+    ("list the pods in the kube-system namespace", "k8s_list_pods", {"namespace": "kube-system"}),
+    ("show warning events in kubernetes", "k8s_events", {}),
 ]
 
 

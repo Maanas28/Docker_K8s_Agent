@@ -3,6 +3,11 @@
 Read this first when starting a new chat. The README covers how things work; this file covers
 where we are, what was decided, and what's next.
 
+## Repository
+GitHub: https://github.com/Maanas28/Docker_K8s_Agent (public), default branch `master`.
+Tag `docker-phase` marks the end of the Docker work (commit eaf853a); Kubernetes work goes on top.
+Never commit `backend/.env` (real API keys) or `backend/agent.db*` (both in .gitignore).
+
 ## Working agreement
 - **Mentoring format** for every coding task: before code, explain the problem, why this approach
   (alternatives and trade-offs), which files change and the flow; then the code; then line-by-line,
@@ -17,7 +22,7 @@ where we are, what was decided, and what's next.
 - Don't permanently delete user files: look first, then move to Trash.
 
 ## Current state
-- Backend: 266 tests pass (`cd backend && uv run pytest`). Frontend builds (`npm run build`).
+- Backend: 282 tests pass (`cd backend && uv run pytest`). Frontend builds (`npm run build`).
 - Model: `qwen3:8b`, thinking off, 32k context (`backend/app/config.py`).
 - Done: chat with three message types; approval gate (reads can be always-allowed, per project for
   code; changes always ask; destructive needs the name typed); Docker read + actions with
@@ -70,6 +75,10 @@ where we are, what was decided, and what's next.
 - Health check fixed (2026-10-09): 5xx = unhealthy (no fall-through), 404 = next path, explicit
   interval/timeout/failure threshold. sample-project v3/v4 marked failed (they contain a test
   RuntimeError in /health); the junk lines were removed from its .dockerignore.
+- **Phase 3 done (2026-10-12, not yet run against a real cluster):** 8 read-only `k8s_*` tools via
+  the Kubernetes Python SDK, context allow-list (`docker-desktop` only), our own describe with "why"
+  facts, Kubernetes chip in the header, example manifest `deploy/sample-project.yaml` (v6, applied
+  by the user). User chose: Docker Desktop Kubernetes, docker-desktop only, manifest yes.
 - **docs/LIMITATIONS.md** records every workaround forced by a limitation. Keep it updated.
 - UI: each finished step is a small collapsed row; approval cards stay open until decided.
 
@@ -93,4 +102,5 @@ case for the Step 3 fix loop.
 
 ## Next
 - (Optional) Count fix-loop attempts with `build_facts` on and off, per model.
-- Try Step 5 for real (redeploy, roll back, versions, clean up). Then Phase 3: Kubernetes read-only.
+- Try Phase 3 on Docker Desktop's cluster. Then Phase 4: Kubernetes actions (scale, rollout restart,
+  delete pod, apply with dry-run; maybe kubectl for apply/diff).

@@ -91,6 +91,15 @@ class RunSettings(BaseModel):
     pass_env_file: bool = True
 
 
+class KubernetesSettings(BaseModel):
+    """Reading Kubernetes clusters (Phase 3). See agent.toml."""
+
+    allowed_contexts: list[str] = ["docker-desktop"]
+    kubeconfig: str | None = None  # None = ~/.kube/config (or $KUBECONFIG)
+    request_timeout_s: int = Field(10, ge=1)
+    log_tail_lines: int = Field(200, ge=10)
+
+
 class LoopSettings(BaseModel):
     """How the agent behaves when steps fail (the build-and-fix loop). See agent.toml."""
 
@@ -159,6 +168,7 @@ class Settings(BaseSettings):
     context: ContextSettings = ContextSettings()
     build: BuildSettings = BuildSettings()
     run: RunSettings = RunSettings()
+    kubernetes: KubernetesSettings = KubernetesSettings()
     loop: LoopSettings = LoopSettings()
     approvals: ApprovalSettings = ApprovalSettings()
 

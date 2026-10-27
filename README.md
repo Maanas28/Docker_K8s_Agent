@@ -140,6 +140,31 @@ passed a health check.
   the newest healthy version older than the running one (or a specific one, e.g. "v2").
 - **History** ("which versions do I have?") and **cleanup** ("clean up old images", destructive).
 
+## Kubernetes (read-only)
+
+The agent can look at a Kubernetes cluster through the official Kubernetes Python SDK, but not
+change it yet (Phase 4). It only uses kubeconfig contexts listed in `[kubernetes] allowed_contexts`
+in `backend/agent.toml` (default: `docker-desktop`), picked by code; kubeconfig credentials and
+Secret values never reach the model or the UI, and pod environment variables are shown by name.
+
+| Tool | What it returns |
+|---|---|
+| `k8s_cluster_info` | Context, Kubernetes version, nodes |
+| `k8s_list_namespaces` | Namespaces |
+| `k8s_list_pods` | Ready, status (CrashLoopBackOff, ImagePullBackOff, Pending…), restarts, age, node |
+| `k8s_describe_pod` | Container states, probes, resources, env names, conditions, events, plus "why" facts |
+| `k8s_pod_logs` | Last lines; `previous=true` for the crashed run |
+| `k8s_list_deployments` | Ready/desired, up-to-date, available, images |
+| `k8s_list_services` | Type, cluster IP, ports, selector |
+| `k8s_events` | Recent warnings, newest first |
+
+To try it: turn on Kubernetes in Docker Desktop (Settings → Kubernetes, "kubeadm" so it can use
+local images), then deploy the example yourself:
+
+```bash
+kubectl --context docker-desktop apply -f deploy/sample-project.yaml
+```
+
 ## Code projects
 
 Register folders under **Projects** in the UI (only you can; the agent has no tool for it). The
@@ -209,7 +234,7 @@ backend/app/
   prompts.py      classifier, action and question prompts
   llm.py          Ollama client (streaming + tool calls)
   store.py        SQLite: always-allow grants, audit log
-  tools/          registry, Docker tools, project tools, build tool
+  tools/          registry, Docker, project, build/run/deploy and Kubernetes tools
 frontend/src/
   App.tsx         chat UI
   useChat.ts      WebSocket protocol
@@ -229,7 +254,7 @@ frontend/src/
 - [x] Model dropdown: local model + free cloud models (Groq, Gemini, OpenRouter, NVIDIA) with a precise usage counter
 - [x] Build & deploy, step 4: run the container + health check (fix loop covers running)
 - [x] Build & deploy, step 5: versions, safe redeploy, rollback, cleanup
-- [ ] Phase 3: Kubernetes read-only
+- [x] Phase 3: Kubernetes read-only (pods, deployments, services, events, logs, describe with "why")
 - [ ] Phase 4: Kubernetes actions (scale, rollout restart, delete pod, apply with dry-run)
 - [ ] Phase 5: multi-step diagnosis
 - [ ] Phase 6: auth, multi-cluster, Helm

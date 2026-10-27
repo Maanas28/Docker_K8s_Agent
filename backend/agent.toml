@@ -55,6 +55,22 @@ compact_at_ratio = 0.75
 build_facts = true
 
 
+# Kubernetes, read-only (Phase 3). Added 2026-10-12.
+[kubernetes]
+
+# The only kubeconfig contexts the agent may use. Your kubeconfig can point at real (work) clusters
+# and holds their credentials, so the agent only ever talks to contexts listed here, and the code,
+# not the model, picks it: the current context if it's allowed, otherwise the first allowed one that
+# exists. Credentials never reach the model or the UI. Default: Docker Desktop's local cluster only.
+allowed_contexts = ["docker-desktop"]
+
+# Each API request is given up after this many seconds.
+request_timeout_s = 10
+
+# Lines of pod logs fetched by default (the model still only sees the last compact_log_lines).
+log_tail_lines = 200
+
+
 # Approvals. Added 2026-10-03.
 [approvals]
 

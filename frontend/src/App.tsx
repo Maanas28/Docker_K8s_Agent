@@ -123,6 +123,17 @@ export default function App() {
           />
           <div className="status-group">
             <StatusDot ok={health?.docker} label="Docker" title={health?.docker ? "Docker is reachable" : "Docker isn't running"} />
+            <StatusDot
+              ok={health?.kubernetes?.ok}
+              label="Kubernetes"
+              title={
+                health?.kubernetes?.ok
+                  ? `Reading the cluster '${health.kubernetes.context}' (read-only)`
+                  : health?.kubernetes?.context
+                    ? `The cluster '${health.kubernetes.context}' isn't answering. Is Kubernetes running in Docker Desktop?`
+                    : "No allowed cluster. Turn on Kubernetes in Docker Desktop (Settings → Kubernetes)."
+              }
+            />
             <StatusDot ok={connected} label={connected ? "Live" : "Offline"} title={connected ? "Connected to backend" : "Reconnecting to backend…"} />
           </div>
           <button className="icon-btn" onClick={() => setShowProjects(true)} title="Projects the agent can read">

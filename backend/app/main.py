@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.llm import LLMUnavailable, OllamaLLM
 from app.models import ModelHub
 from app.store import Store
-from app.tools import build_tools, code_tools, docker_tools, run_tools
+from app.tools import build_tools, code_tools, docker_tools, k8s_tools, run_tools
 from app.tools import load_all
 from app.tools.registry import registry
 from app.workspace import safe_project_path
@@ -32,6 +32,7 @@ hub = ModelHub(settings, store, local_llm=llm)
 code_tools.configure(store, build_facts=settings.context.build_facts)
 build_tools.configure(settings.build)
 run_tools.configure(settings.run)
+k8s_tools.configure(settings.kubernetes)
 
 app = FastAPI(title="Docker/K8s Agent")
 
@@ -53,6 +54,7 @@ async def health() -> dict:
         **await llm.status(),
         "model": settings.ollama_model,
         "docker": await asyncio.to_thread(docker_tools.ping),
+        "kubernetes": await asyncio.to_thread(k8s_tools.ping),
     }
 
 

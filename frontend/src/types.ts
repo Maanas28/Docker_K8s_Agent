@@ -139,7 +139,14 @@ export type ModelStatus = {
   usage: ModelUsage | null;
 };
 
-export type Health = { ollama: boolean; model_available: boolean; model: string; docker: boolean };
+export type Health = {
+  ollama: boolean;
+  model_available: boolean;
+  model: string;
+  docker: boolean;
+  // The allowed Kubernetes context (agent.toml [kubernetes]) and whether it answers.
+  kubernetes?: { ok: boolean; context: string | null };
+};
 
 export type ProjectInfo = {
   name: string;

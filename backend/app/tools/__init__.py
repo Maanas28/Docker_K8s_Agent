@@ -6,4 +6,4 @@ Registration isn't done on import of this package, so modules like workspace.py 
 
 
 def load_all() -> None:
-    from app.tools import build_tools, code_tools, deploy_tools, docker_tools, run_tools  # noqa: F401  (importing registers the tools)
+    from app.tools import build_tools, code_tools, deploy_tools, docker_tools, k8s_tools, run_tools  # noqa: F401  (importing registers the tools)
